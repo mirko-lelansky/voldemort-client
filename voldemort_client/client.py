@@ -57,7 +57,8 @@ class VoldemortClient:
                 try:
                     server = self._servers[retries][0]
                     headers = helper.build_get_headers(self._connection_timeout)
-                    response = requests.get(helper.build_url(server, self._store_name, key), headers=headers)
+                    response = requests.get(helper.build_url(server,
+                        self._store_name, key), headers=headers)
                     response.raise_for_status()
                 except (ConnectionError, HTTPError, Timeout) as error:
                     if (retries + 1) < self._server_length:
@@ -122,9 +123,12 @@ class VoldemortClient:
                 try:
                     server = self._servers[retries][0]
                     node_id = self._servers[retries][1]
-                    clock = helper.build_vector_clock(vector_clock, timeout, node_id, versions)
-                    headers = helper.build_set_headers(self._connection_timeout, clock)
-                    response = requests.post(helper.build_url(server, self._store_name, key), headers=headers, data=value)
+                    clock = helper.build_vector_clock(vector_clock, timeout,
+                            node_id, versions)
+                    headers = helper.build_set_headers(self._connection_timeout,
+                            clock)
+                    response = requests.post(helper.build_url(server,
+                        self._store_name, key), headers=headers, data=value)
                     response.raise_for_status()
                 except (ConnectionError, HTTPError, Timeout) as error:
                     if (retries + 1) < self._server_length:
@@ -154,9 +158,12 @@ class VoldemortClient:
                 while retries < self._server_length and response is None:
                     try:
                         server = self._servers[retries][0]
-                        clock = helper.build_vector_clock(vector_clock, None, None, None)
-                        headers = helper.build_delete_headers(self._connection_timeout, clock)
-                        response = requests.delete(helper.build_url(server, self._store_name, key), headers=headers)
+                        clock = helper.build_vector_clock(vector_clock, None,
+                                None, None)
+                        headers = helper.build_delete_headers(self._connection_timeout,
+                                clock)
+                        response = requests.delete(helper.build_url(server,
+                            self._store_name, key), headers=headers)
                         response.raise_for_status()
                     except (ConnectionError, HTTPError, Timeout) as error:
                         if (retries + 1) < self._server_length:
@@ -204,7 +211,8 @@ class VoldemortClient:
 
     def _is_valid(self, servers, store_name, debug, connection_timeout):
         valid = False
-        if self._is_valid_servers(servers) and self._is_valid_store_name(store_name) and self._is_valid_debug(debug) and self._is_valid_connection_timeout(connection_timeout):
+        if self._is_valid_servers(servers) and self._is_valid_store_name(store_name)
+        and self._is_valid_debug(debug) and self._is_valid_connection_timeout(connection_timeout):
             valid = True
         return valid
 

@@ -5,7 +5,8 @@ from datetime import datetime
 def build_vector_clock(vector_clock, timeout=None, node_id=None, versions=None):
     """
     """
-    if vector_clock is not None or (timeout is not None and (node_id is not None or versions is not None)):
+    if vector_clock is not None or (timeout is not None and (node_id is not None
+        or versions is not None)):
         if vector_clock is not None:
             if timeout is not None:
                 vector_clock["timeout"] = timeout
