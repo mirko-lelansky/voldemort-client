@@ -1,8 +1,8 @@
-import base64
 import email
+import re
 import requests
 import simplejson as json
-import time
+from voldemort_client import helper
 from voldemort_client.exception import VoldemortException
 
 class VoldemortClient:
@@ -30,21 +30,19 @@ class VoldemortClient:
         :param key: the key to fetch
         :type key: str
         """
-        key_byte = base64.b64encode(key.encode())
-        headers = {
-                "X-VOLD-Request-Timeout-ms": str(self._request_timeout),
-                "X-VOLD-Request-Origin-Time-ms": str(self._origin_time)
-        }
-        response = requests.get("%s://%s:%d/%s/%s" % (self._protocol,
-            self._host, self._port, self._store_name, key_byte), headers=headers)
-        if response.status_code == 200:
-            content = response.content.decode()
-            lines = content.splitlines()
-            text = '\r\n'.join(lines[1:-1])
-            msg = email.message_from_string(text)
-            vector_clock = json.loads(msg.get("X-VOLD-VECTOR-CLOCK"))
-            return (vector_clock["versions"], msg.get_payload())
-        elif response.status_code == 404:
+        headers = helper.build_get_headers(self._request_timeout, self._origin_time)
+        response = requests.get(helper.build_url(self._host, self._port, self._store_name, key, self._protocol), headers=headers)
+        response_code = response.status_code
+        if response_code == 200:
+            messages = self._extract_messages(response.content)
+            sub_messages = [message.get_payload()[0] for message in messages]
+            result = []
+            for sub_message in sub_messages:
+                header = sub_message.get("X-VOLD-Vector-Clock")
+                versiondict = json.loads(header)
+                result.append((versiondict["versions"], sub_message.get_payload()))
+            return result
+        elif response_code == 404:
             return []
         else:
             response.raise_for_status()
@@ -52,13 +50,13 @@ class VoldemortClient:
      def gets(self, keys):
          """
          This method returns the values from the key list.
-         
+
          :param keys: the list of keys
          :type keys: list
          """
-         return self._get(', '.join(keys))
+         return self.get(', '.join(keys))
 
-    def set(self, key, value, node_id = None, versions = None):
+    def set(self, key, value, node_id = None):
         """
         This method sets the value on the server.
 
@@ -68,76 +66,65 @@ class VoldemortClient:
         :type value: str
         :param node_id: the id of one node
         :type node_id: int
-        :param versions: the list of versions which entries are dict with the
-        keys nodeId and version
-        :type version: list
         """
-        key_byte = base64.b64encode(key.encode())
         fetch_value = self.get(key)
         clock = None
         if len(fetch_value) > 0:
             versions = fetch_value[0]
             for versiondict in versions:
                 versiondict["version"] = versiondict["version"] + 1
-                clock = {
-                    "versions": versions,
-                    "timestamp": time.time() * 1000
-                }
-        else:
-            if versions:
-                clock = {
-                    "versions": versions,
-                    "timestamp": time.time() * 1000
-                }
-            elif node_id:
-                clock = {
-                    "versions": [{
-                        "nodeId": node_id,
-                        "version": 1
-                    }],
-                    "timestamp": time.time() * 1000
-                }
-            else:
-                raise VoldemortException("The key must exists or you must give the node id or the versions.")
-        headers = {
-            "X-VOLD-Request-Timeout-ms": str(self._request_timeout),
-            "X-VOLD-Request-Origin-Time-ms": str(self._origin_time),
-            "X-VOLD-Vector-Clock": json.dumps(clock),
-            "Content-Type": "text/plain"
-        }
-        response = requests.post("%s://%s:%d/%s/%s" % (self._protocol,
-            self._host, self._port, self._store_name, key_byte),
-            headers=headers, data=value)
-        response.raise_for_status(
+            clock = helper.build_vector_clock(node_id, versions)
+            print(clock)
+            headers = helper.build_set_headers(self._request_timeout, self._origin_time, clock)
+            print(headers)
+            response = requests.post(helper.build_url(self._host, self._port,
+                self._store_name, key, self._protocol), headers=headers, data=value)
+        response.raise_for_status()
 
-    def delete(self, key, versions = None):
+    def delete(self, key):
         """
         This method deletes an existing value.
 
         :param key: the key to delete
         :type key: str
         """
-        key_byte = base64.b64encode(key.encode())
         fetch_value = self.get(key)
         clock = None
         if len(fetch_value) > 0:
-            if versions:
-                clock = {
-                    "versions": versions,
-                    "timestamp": time.time() * 1000
-                }
-            else:
-                clock = {
-                    "versions": fetch_value[0],
-                    "timestamp": time.time() * 1000
-                }
-            headers = {
-                "X-VOLD-Request-Timeout-ms": str(self._request_timeout),
-                "X-VOLD-Request-Origin-Time-ms": str(self._origin_time),
-                "X-VOLD-Vector-Clock": json.dumps(clock),
-                "Content-Type": "text/plain"
-            }
-            response = requests.delete("%s://%s:%d/%s/%s" % (self._protocol,
-                self._host, self._port, self._store_name, key_byte),
-                headers=headers)
+            clock = helper.build_vector_clock(None, fetch_value[0])
+            headers = helper.build_delete_headers(self._request_timeout, self._origin_time, clock)
+            response = requests.delete(helper.build_url(self._host, self._port, self._store_name, key, self._protocol), headers=headers)
             response.raise_for_status()
+
+    def _extract_messages(self, response_content):
+        """
+        """
+        parse_content = response_content.decode()
+        lines = parse_content.split("\r\n")
+
+        revision_exp = re.compile("----=_Part_\d+_\d+.\d+")
+        boundary_exp = re.compile("(?<=boundary=\")(.*)(?=\")")
+        multipart_exp = re.compile("Content-Type: multipart/mixed;")
+
+        all_boundaries = boundary_exp.findall(parse_content)
+
+        result = []
+        for line in lines:
+            revision_matcher = revision_exp.search(line)
+            boundary_matcher = boundary_exp.search(line)
+            if revision_matcher is None or boundary_matcher is not None:
+                result.append(line)
+            elif revision_matcher is not None and boundary_matcher is None:
+                for boundary in all_boundaries:
+                    rev_exp = re.compile(boundary)
+                    if rev_exp.search(line) is not None:
+                        result.append(line)
+        text = '\r\n'.join(result)
+        start_index_list = [match.start() for match in multipart_exp.finditer(text)]
+        messages_text = []
+        for index, value in enumerate(start_index_list):
+            if index < len(start_index_list) - 1:
+                messages_text.append(text[value:start_index_list[index+1]])
+            else:
+                messages_text.append(text[value:])
+        return [email.message_from_string(message) for message in messages_text]
