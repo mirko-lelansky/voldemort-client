@@ -34,6 +34,7 @@ class VoldemortClient:
         response = requests.get(helper.build_url(self._host, self._port, self._store_name, key, self._protocol), headers=headers)
         response_code = response.status_code
         if response_code == 200:
+            print(response.content)
             messages = self._extract_messages(response.content)
             sub_messages = [message.get_payload()[0] for message in messages]
             result = []
@@ -70,15 +71,13 @@ class VoldemortClient:
         fetch_value = self.get(key)
         clock = None
         if len(fetch_value) > 0:
-            versions = fetch_value[0]
+            versions = fetch_value[0][0]
             for versiondict in versions:
                 versiondict["version"] = versiondict["version"] + 1
-            clock = helper.build_vector_clock(node_id, versions)
-            print(clock)
-            headers = helper.build_set_headers(self._request_timeout, self._origin_time, clock)
-            print(headers)
-            response = requests.post(helper.build_url(self._host, self._port,
-                self._store_name, key, self._protocol), headers=headers, data=value)
+        clock = helper.build_vector_clock(node_id, versions)
+        headers = helper.build_set_headers(self._request_timeout, self._origin_time, clock)
+        response = requests.post(helper.build_url(self._host, self._port,
+            self._store_name, key, self._protocol), headers=headers, data=value)
         response.raise_for_status()
 
     def delete(self, key):
@@ -91,7 +90,7 @@ class VoldemortClient:
         fetch_value = self.get(key)
         clock = None
         if len(fetch_value) > 0:
-            clock = helper.build_vector_clock(None, fetch_value[0])
+            clock = helper.build_vector_clock(None, fetch_value[0][0])
             headers = helper.build_delete_headers(self._request_timeout, self._origin_time, clock)
             response = requests.delete(helper.build_url(self._host, self._port, self._store_name, key, self._protocol), headers=headers)
             response.raise_for_status()

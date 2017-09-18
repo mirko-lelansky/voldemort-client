@@ -34,3 +34,12 @@ class TestVoldemortClient:
             client = VoldemortClient("localhost", 8082, "test1")
             result = client.get("k")
             assert "v" == result[0][1]
+
+    def test_multiget_notexists(self):
+        """
+        """
+        with requests_mock.Mocker() as mock:
+            mock.get("http://localhost:8082/test1/a,b,c", status_code=404)
+            client = VoldemortClient("localhost", 8082, "test1")
+            result = client.gets(["a", "b", "c"])
+            assert [] == result
