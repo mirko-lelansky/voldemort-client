@@ -5,3 +5,4 @@
 dist/
 voldemort_client.egg-info/
 **/__pycache__/
+**/build/
