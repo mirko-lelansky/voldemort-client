@@ -32,7 +32,7 @@ def build_get_headers(request_timeout):
     timestamp = datetime.utcnow().timestamp()
     return {
             "X-VOLD-Request-Timeout-ms": str(request_timeout * 1000),
-            "X-VOLD-Request-Origin-Time-ms": str(int(timestamp))
+            "X-VOLD-Request-Origin-Time-ms": str(int(timestamp) * 1000)
     }
 
 

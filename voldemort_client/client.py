@@ -93,7 +93,7 @@ class VoldemortClient:
          """
          return self.get(', '.join(keys))
 
-    def set(self, key, value, node_id = None):
+    def set(self, key, value, timeout=None):
         """
         This method sets the value on the server.
 
@@ -101,8 +101,8 @@ class VoldemortClient:
         :type key: str
         :param value: the value to store
         :type value: str
-        :param node_id: the id of one node
-        :type node_id: int
+        :param timeout: the expire time as timestamp
+        :type timeout: int or None
         """
         if isinstance(key, str):
             server = ""
@@ -211,8 +211,7 @@ class VoldemortClient:
 
     def _is_valid(self, servers, store_name, debug, connection_timeout):
         valid = False
-        if self._is_valid_servers(servers) and self._is_valid_store_name(store_name)
-        and self._is_valid_debug(debug) and self._is_valid_connection_timeout(connection_timeout):
+        if self._is_valid_servers(servers) and self._is_valid_store_name(store_name) and self._is_valid_debug(debug) and self._is_valid_connection_timeout(connection_timeout):
             valid = True
         return valid
 
