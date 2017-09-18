@@ -89,8 +89,14 @@ class VoldemortClient:
              return None
          else:
              messages = self._extract_messages(content)
-             sub_messages = [message.get_payload()[0] for message in messages]
-             return [(sub_message.get_payload(), json.loads(sub_message.get("X-VOLD-Vector-Clock"))) for sub_message in sub_messages]
+             sub_messages = [(msg.get("Content-Location"), msg.get_payload()[0]) for msg in messages]
+             result_list = [(sub_message[0].rsplit("/")[2], sub_message[1].get_payload()) for sub_message in sub_messages]
+             result = {}
+             for location, value in result_list:
+                 for key in keys:
+                     if key.startswith(location):
+                         result[key] = value
+            return result
 
     def get_version(self, key):
         """
