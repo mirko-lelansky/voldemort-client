@@ -4,12 +4,6 @@ class VoldemortException(Exception):
     """
     pass
 
-class ParserException(VoldemortException):
-    """
-    This is the concret exception class for the parser exceptions.
-    """
-    pass
-
 class ConnectionException(VoldemortException):
     """
     This is the base exception class for the connection handling.

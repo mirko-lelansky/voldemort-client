@@ -1,12 +1,14 @@
+from voldemort_client.client import VoldemortClient
+
 class TestVoldemortClient:
     """
     This is the test class for the VoldemortClient class.
     """
 
-    def test_get(self, client):
+    def test_get(self):
         """
         Test the basic get method workflow.
         """
-        assert None == client.get("k")
-        client.set("k", "v")
-        assert  "v" == client.get("k")[0]
+        client = VoldemortClient("localhost", 8082, "test")
+        result = client.get("k")
+        assert  [] == result
