@@ -63,9 +63,13 @@ config = dict(
         'Topic :: Software Development :: Libraries :: Python Modules'
     ],
     keywords='',
-    packages=['voldemort_client'],
+    packages=[
+        'voldemort_client',
+        'voldemort_client.protocol',
+        'voldemort_client.serialization'
+    ],
     platforms=['any'],
-    install_requires=["protobuf"],
+    install_requires=["protobuf", "simplejson"],
     tests_require=['tox'],
     cmdclass={'test': Tox},
     include_package_data=True,
