@@ -1,4 +1,4 @@
-import voldemort_client.serialization.common
+from voldemort_client.serialization.exception import SerializationException
 
 from io import StringIO
 import datetime
