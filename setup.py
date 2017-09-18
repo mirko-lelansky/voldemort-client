@@ -64,12 +64,10 @@ config = dict(
     ],
     keywords='',
     packages=[
-        'voldemort_client',
-        'voldemort_client.protocol',
-        'voldemort_client.serialization'
+        'voldemort_client'
     ],
     platforms=['any'],
-    install_requires=["protobuf", "simplejson"],
+    install_requires=["protobuf", "simplejson", "requests"],
     tests_require=['tox'],
     cmdclass={'test': Tox},
     include_package_data=True,
