@@ -9,6 +9,6 @@ class TestVoldemortClient:
         """
         Test the basic get method workflow.
         """
-        client = VoldemortClient("localhost", 8082, "test")
+        client = VoldemortClient("localhost", 8082, "test1")
         result = client.get("k")
         assert  [] == result

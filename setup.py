@@ -67,7 +67,7 @@ config = dict(
         'voldemort_client'
     ],
     platforms=['any'],
-    install_requires=["protobuf", "simplejson", "requests"],
+    install_requires=["simplejson", "requests"],
     tests_require=['tox'],
     cmdclass={'test': Tox},
     include_package_data=True,
