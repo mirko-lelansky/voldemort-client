@@ -76,7 +76,7 @@ class VoldemortClient:
             message = email.message_from_string(msg)
             return message.get_payload()
 
-     def get_all(self, keys):
+     def get_many(self, keys):
          """
          This method returns the values from the key list.
 
