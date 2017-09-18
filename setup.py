@@ -65,6 +65,7 @@ config = dict(
     keywords='',
     packages=['voldemort_client'],
     platforms=['any'],
+    install_requires=["protobuf"],
     tests_require=['tox'],
     cmdclass={'test': Tox},
     include_package_data=True,
