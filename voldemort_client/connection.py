@@ -14,16 +14,16 @@ class SocketConnector:
         """
         This is the initialization method of the class.
         """
-        self.connection = None
-        self.open = False
-        self.request_count = 0
-        self.conflict_resolver = conflict_resolver
+        self._connection = None
+        self._connected = False
+        self._request_count = 0
+        self._conflict_resolver = conflict_resolver
 
     def open_connection(self, host, port, protocol="pb0"):
         """
         This method opens a socket connection to the server.
         """
-        if not self.connection:
+        if not self._connection:
             conn = None
             try:
                 logging.debug("Attempt to connect to %s:%d ." % (host, port))
@@ -36,8 +36,8 @@ class SocketConnector:
                     conn.close()
                     raise ConnectionException("The server didn't understand the protocol.")
                 logging.debug("Changeing protocol succeeded.")
-                self.connection = conn
-                self.open = True
+                self._connection = conn
+                self._connected = True
             except soccket.error as e:
                 if conn:
                     conn.close()
@@ -54,14 +54,16 @@ class SocketConnector:
         :param should_route:
         :type should_route: bool
         """
-        if self.open:
+        if self._connected:
             request = protocol.VoldemortRequest()
             request.get.key = key
             request.should_route = should_route
             request.store = store_name
             request.type = protocol.GET
 
-            self._send_request(request.SerializeToString())
+            proto_request = request.SerializeToString()
+
+            self._send_request(proto_request)
 
             response_content = self._received_response()
             response = protocol.GetResponse()
@@ -76,7 +78,7 @@ class SocketConnector:
         """
         This method executes a protobuf put request.
         """
-        if self.open:
+        if self._connected:
             request = protocol.VoldemortRequest()
             request.put.key = key
             request.put.versioned.value = value
@@ -101,10 +103,10 @@ class SocketConnector:
         """
         This method closed the socket connection.
         """
-        if self.connection:
+        if self._connected:
             try:
-                self.connection.close()
-                self.open = False
+                self._connection.close()
+                self._connected = False
             except socket.error as e:
                 raise ConnectionException("The connection couldn't be close.")
 
@@ -116,8 +118,8 @@ class SocketConnector:
         :type request: protobuf message
         """
         try:
-            self.connection.send(struct.pack(">i", len(request)) + request)
-            self.request_count += 1
+            self._cconnection.send(struct.pack(">i", len(request)) + request)
+            self._request_count += 1
         except socket.error as e:
             raise ConnectionException("The request couldn't be send.")
 
@@ -125,9 +127,8 @@ class SocketConnector:
         """
         This method received the reponses from the server.
         """
-        size_bytes = self.connection.recv(4)
+        size_bytes = self._connection.recv(4)
         if not size_bytes:
-            self.close_connection()
             raise VoldemortException("The server send any bytes.")
         size = struct.unpack(">i", size_bytes)[0]
 
@@ -135,7 +136,7 @@ class SocketConnector:
         data = []
 
         while size and bytes_read < size:
-            chunk = self.connection.recv(size - bytes_read)
+            chunk = self._connection.recv(size - bytes_read)
             bytes_read += len(chunk)
             data.append(chunk)
 
@@ -149,7 +150,7 @@ class SocketConnector:
         :type response: protobuf message
         """
         if response.error and response.error.error_code != 0:
-            raise ConnectionException(response.error.error_code)
+            raise ConnectionException(response.error.error_message)
 
     def _extract_versions(self, response_versions):
         """
@@ -168,8 +169,8 @@ class SocketConnector:
         :param versions:
         :type versions:
         """
-        if self.conflict_resolver and versions:
-            return self.conflict_resolver(versions)
+        if self._conflict_resolver and versions:
+            return self._conflict_resolver(versions)
         else:
             return versions
 
