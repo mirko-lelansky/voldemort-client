@@ -1,10 +1,9 @@
-import logging
-import random
-from voldemort_client.connection import SocketConnector
-from voldemort_client.exception import VoldemortException, ConnectionException
-from voldemort_client.model import Node, Store
-from voldemort_client.protocol import voldemort_client_v2_pb2 as protocol
-from voldemort_client import serialization
+import base64
+import email
+import requests
+import simplejson as json
+import time
+from voldemort_client.exception import VoldemortException
 
 class VoldemortClient:
     """
@@ -12,83 +11,133 @@ class VoldemortClient:
     the accessing methods.
     """
 
-    def __init__(self, store_name, bootstrap_urls, conflict_resolver = None):
+    def __init__(self, host, port, store_name, protocol="http",
+            request_timeout=3000, origin_time=3000):
         """
         This is the constructor method of the class.
         """
-        self._connection = None
-        self._conflict_resolver = conflict_resolver
+        self._host = host
+        self._port = port
         self._store_name = store_name
-        self.bootstrap_urls = bootstrap_urls
-        self._nodes = None
-        self._store = None
-        self._bootstrap()
-        self._reconnect()
-        
+        self._protocol = protocol
+        self._request_timeout = request_timeout
+        self._origin_time = origin_time
+
     def get(self, key):
         """
         This method returns the value, versions pairs from the server.
-        
+
         :param key: the key to fetch
         :type key: str
         """
-        raw_key = self._store.key_serializer.write(key)
-        versions = self._connection.execute_get_request(raw_key.encode(), self._store_name, True)
-        return [(self._store.value_serializer.read(value), version) for value, version in versions]
+        key_byte = base64.b64encode(key.encode())
+        headers = {
+                "X-VOLD-Request-Timeout-ms": str(self._request_timeout),
+                "X-VOLD-Request-Origin-Time-ms": str(self._origin_time)
+        }
+        response = requests.get("%s://%s:%d/%s/%s" % (self._protocol,
+            self._host, self._port, self._store_name, key_byte), headers=headers)
+        if response.status_code == 200:
+            content = response.content.decode()
+            lines = content.splitlines()
+            text = '\r\n'.join(lines[1:-1])
+            msg = email.message_from_string(text)
+            vector_clock = json.loads(msg.get("X-VOLD-VECTOR-CLOCK"))
+            return (vector_clock["versions"], msg.get_payload())
+        elif response.status_code == 404:
+            return []
+        else:
+            response.raise_for_status()
 
-    def set(self):
-        """
-        """
+     def gets(self, keys):
+         """
+         This method returns the values from the key list.
+         
+         :param keys: the list of keys
+         :type keys: list
+         """
+         return self._get(', '.join(keys))
 
-    def close(self):
+    def set(self, key, value, node_id = None, versions = None):
         """
-        This method close the connection to the cluster and clean the resources.
-        """
-        if self._connection:
-            self._connection.close_connection()
-            self._connection = None
+        This method sets the value on the server.
 
-    def _bootstrap(self):
+        :param key: the key under which the value should be store
+        :type key: str
+        :param value: the value to store
+        :type value: str
+        :param node_id: the id of one node
+        :type node_id: int
+        :param versions: the list of versions which entries are dict with the
+        keys nodeId and version
+        :type version: list
         """
-        This method bootstraps the client with the metadata from the cluster.
+        key_byte = base64.b64encode(key.encode())
+        fetch_value = self.get(key)
+        clock = None
+        if len(fetch_value) > 0:
+            versions = fetch_value[0]
+            for versiondict in versions:
+                versiondict["version"] = versiondict["version"] + 1
+                clock = {
+                    "versions": versions,
+                    "timestamp": time.time() * 1000
+                }
+        else:
+            if versions:
+                clock = {
+                    "versions": versions,
+                    "timestamp": time.time() * 1000
+                }
+            elif node_id:
+                clock = {
+                    "versions": [{
+                        "nodeId": node_id,
+                        "version": 1
+                    }],
+                    "timestamp": time.time() * 1000
+                }
+            else:
+                raise VoldemortException("The key must exists or you must give the node id or the versions.")
+        headers = {
+            "X-VOLD-Request-Timeout-ms": str(self._request_timeout),
+            "X-VOLD-Request-Origin-Time-ms": str(self._origin_time),
+            "X-VOLD-Vector-Clock": json.dumps(clock),
+            "Content-Type": "text/plain"
+        }
+        response = requests.post("%s://%s:%d/%s/%s" % (self._protocol,
+            self._host, self._port, self._store_name, key_byte),
+            headers=headers, data=value)
+        response.raise_for_status(
+
+    def delete(self, key, versions = None):
         """
-        random.shuffle(self._bootstrap_urls)
-        for host, port in self._bootstrap_urls:
-            logging.debug("Attempt to bootstrap metadata from %s:%d." % (host, port))
-            conn = None
-            try:
-                conn = SocketConnector(self._conflict_resolver)
-                conn.open_connection(host, port)
-                cluster_xmls = conn.execute_get_request("cluster.xml".encode(), "metadata", should_route = False)
-                if len(cluster_xmls) != 1:
-                    raise VoldemortException("Only one cluster_xml. But found %d." % len(cluster_xmls))
-                self._nodes = Node.parse_cluster_xml(cluster_xmls[0][0])
-                stores_xml = conn.execute_get_request("stores.xml".encode(), "metadata", should_route = False)
-                if len(stores_xml) != 1:
-                    raise VoldemortException("No stores xmls found.")
-                self._store = Store.parse_store_xml(stores_xml[0][0], self.store_name)
-            except ConnectionException as e:
-                logging.warn("Metadata fetch form host %s:%d failed." % (host, port))
-            finally:
-                conn.close_connection()
-            if not self._nodes or not self._store:
-                raise VoldemortException("All bootstrap attemps failed.")
-            
-    def _reconnect(self):
-        num_nodes = len(self._nodes)
-        attempts = 0
-        self.close()
-        while attempts < num_nodes:
-            node_id = (node_id + 1) % num_nodes
-            new_node = self._nodes[node_id]
-            conn = None
-            try:
-                conn = SocketConnector(self._conflict_resolver)
-                conn.open_connection(new_node.host, new_node.socket_port)
-                self._connection = conn
-                break
-            except ConnectionException as e:
-                logging.warn("Error connection to node %s:%d." %(host, port))
-                attempts += 1
-        if not self._connection:
-            raise VoldemortException("Connections to all nodes failed.")
+        This method deletes an existing value.
+
+        :param key: the key to delete
+        :type key: str
+        """
+        key_byte = base64.b64encode(key.encode())
+        fetch_value = self.get(key)
+        clock = None
+        if len(fetch_value) > 0:
+            if versions:
+                clock = {
+                    "versions": versions,
+                    "timestamp": time.time() * 1000
+                }
+            else:
+                clock = {
+                    "versions": fetch_value[0],
+                    "timestamp": time.time() * 1000
+                }
+            headers = {
+                "X-VOLD-Request-Timeout-ms": str(self._request_timeout),
+                "X-VOLD-Request-Origin-Time-ms": str(self._origin_time),
+                "X-VOLD-Vector-Clock": json.dumps(clock),
+                "Content-Type": "text/plain"
+            }
+            response = requests.delete("%s://%s:%d/%s/%s" % (self._protocol,
+                self._host, self._port, self._store_name, key_byte),
+                headers=headers)
+            response.raise_for_status()
