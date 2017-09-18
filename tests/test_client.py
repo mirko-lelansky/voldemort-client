@@ -17,7 +17,7 @@ class TestVoldemortClient:
         """
         with requests_mock.Mocker() as mock:
             mock.get("http://localhost:8082/test1/k", status_code=404)
-            client = VoldemortClient("localhost", 8082, "test1")
+            client = VoldemortClient([("http://localhost:8082", 0)], "test1")
             result = client.get("k")
             assert [] == result
 
@@ -31,15 +31,15 @@ class TestVoldemortClient:
             part1.add_header("X-VOLD-Vector-Clock", json.dumps(helper.build_vector_clock(0, None)))
             expected.attach(part1)
             mock.get("http://localhost:8082/test1/k", status_code=200, text=expected.as_string())
-            client = VoldemortClient("localhost", 8082, "test1")
+            client = VoldemortClient([("http://localhost:8082", 0)], "test1")
             result = client.get("k")
-            assert "v" == result[0][1]
+            assert "v" == result[0][0]
 
     def test_multiget_notexists(self):
         """
         """
         with requests_mock.Mocker() as mock:
             mock.get("http://localhost:8082/test1/a,b,c", status_code=404)
-            client = VoldemortClient("localhost", 8082, "test1")
-            result = client.gets(["a", "b", "c"])
+            client = VoldemortClient([("http://localhost:8082", 0)], "test1")
+            result = client.get_all(["a", "b", "c"])
             assert [] == result

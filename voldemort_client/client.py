@@ -1,9 +1,11 @@
 import email
+import logging
 import re
 import requests
+from requests.exceptions import ConnectionError, HTTPError, Timeout
 import simplejson as json
 from voldemort_client import helper
-from voldemort_client.exception import VoldemortException
+from voldemort_client.exception import VoldemortException, ConnectionException
 
 class VoldemortClient:
     """
@@ -11,17 +13,34 @@ class VoldemortClient:
     the accessing methods.
     """
 
-    def __init__(self, host, port, store_name, protocol="http",
-            request_timeout=3000, origin_time=3000):
+    def __init__(self, servers, store_name, connection_timeout=3, debug=False,
+            server_max_key_length=None, server_max_value_length=None):
         """
         This is the constructor method of the class.
+
+        :param servers: the list of server tuples (url, node_id)
+        :type servers: list
+        :param store_name: the name of the used store
+        :type store_name: str
+        :param connection_timeout: the timeout of the http connection in seconds
+        :type connection_timeout: int
+        :param debug: if true print more logging messages
+        :type debug: bool
+        :param server_max_key_length: the max length of the key
+        :type server_max_key_length: int
+        :param server_max_value_length: the max length of the value
+        :type server_max_value_length: int
         """
-        self._host = host
-        self._port = port
+        if not self._is_valid(servers, store_name, debug, connection_timeout):
+            raise ValueError("The class isn't correct initialised.")
+
+        self._servers = servers
         self._store_name = store_name
-        self._protocol = protocol
-        self._request_timeout = request_timeout
-        self._origin_time = origin_time
+        self._connection_timeout = connection_timeout
+        self._debug = debug
+        self._server_max_key_length = server_max_key_length
+        self._server_max_value_length = server_max_value_length
+        self._server_length = len(self._servers)
 
     def get(self, key):
         """
@@ -30,25 +49,41 @@ class VoldemortClient:
         :param key: the key to fetch
         :type key: str
         """
-        headers = helper.build_get_headers(self._request_timeout, self._origin_time)
-        response = requests.get(helper.build_url(self._host, self._port, self._store_name, key, self._protocol), headers=headers)
-        response_code = response.status_code
-        if response_code == 200:
-            print(response.content)
+        if isinstance(key, str):
+            server = ""
+            retries = 0
+            response = None
+            while retries < self._server_length and response is None:
+                try:
+                    server = self._servers[retries][0]
+                    headers = helper.build_get_headers(self._connection_timeout)
+                    response = requests.get(helper.build_url(server, self._store_name, key), headers=headers)
+                    response.raise_for_status()
+                except (ConnectionError, HTTPError, Timeout) as error:
+                    if (retries + 1) < self._server_length:
+                        if self._debug:
+                            logging.debug("The value couldn't be fetched from server %s." % server)
+                        retries = retries + 1
+                        response = None
+                    else:
+                        if isinstance(error, ConnectionError) or isinstance(error, Timeout):
+                            raise ConnectionException("No connection couldn't established.")
+                        elif isinstance(error, HTTPError) and response.status_code == 404:
+                            return []
+                        else:
+                            raise VoldemortException("An unknown exception occured.")
             messages = self._extract_messages(response.content)
             sub_messages = [message.get_payload()[0] for message in messages]
             result = []
             for sub_message in sub_messages:
                 header = sub_message.get("X-VOLD-Vector-Clock")
-                versiondict = json.loads(header)
-                result.append((versiondict["versions"], sub_message.get_payload()))
+                vector_clock = json.loads(header)
+                result.append((sub_message.get_payload(), vector_clock))
             return result
-        elif response_code == 404:
-            return []
         else:
-            response.raise_for_status()
+            raise VoldemortException("The key isn't a string.")
 
-     def gets(self, keys):
+     def get_all(self, keys):
          """
          This method returns the values from the key list.
 
@@ -68,17 +103,39 @@ class VoldemortClient:
         :param node_id: the id of one node
         :type node_id: int
         """
-        fetch_value = self.get(key)
-        clock = None
-        if len(fetch_value) > 0:
-            versions = fetch_value[0][0]
-            for versiondict in versions:
-                versiondict["version"] = versiondict["version"] + 1
-        clock = helper.build_vector_clock(node_id, versions)
-        headers = helper.build_set_headers(self._request_timeout, self._origin_time, clock)
-        response = requests.post(helper.build_url(self._host, self._port,
-            self._store_name, key, self._protocol), headers=headers, data=value)
-        response.raise_for_status()
+        if isinstance(key, str):
+            server = ""
+            retries = 0
+            response = None
+            vector_clock = None
+            versions = None
+            try:
+                fetch_value = self.get(key)
+                if fetch_value is not None and len(fetch_value) > 0:
+                    vector_clock = fetch_value[0][1]
+                    versions = vector_clock["versions"]
+                    versions["version"] = versions["version"] + 1
+            except VoldemortException:
+                vector_clock = None
+                versions = None
+            while retries < self._server_length and response is None:
+                try:
+                    server = self._servers[retries][0]
+                    node_id = self._servers[retries][1]
+                    clock = helper.build_vector_clock(vector_clock, timeout, node_id, versions)
+                    headers = helper.build_set_headers(self._connection_timeout, clock)
+                    response = requests.post(helper.build_url(server, self._store_name, key), headers=headers, data=value)
+                    response.raise_for_status()
+                except (ConnectionError, HTTPError, Timeout) as error:
+                    if (retries + 1) < self._server_length:
+                        if self._debug:
+                            logging.debug("The value couldn't be set on server %s." % server)
+                        retries = retries + 1
+                        response = None
+                    else:
+                        raise VoldemortException("The value couldn't be set.")
+        else:
+            raise VoldemortException("The key isn't a string.")
 
     def delete(self, key):
         """
@@ -87,13 +144,30 @@ class VoldemortClient:
         :param key: the key to delete
         :type key: str
         """
-        fetch_value = self.get(key)
-        clock = None
-        if len(fetch_value) > 0:
-            clock = helper.build_vector_clock(None, fetch_value[0][0])
-            headers = helper.build_delete_headers(self._request_timeout, self._origin_time, clock)
-            response = requests.delete(helper.build_url(self._host, self._port, self._store_name, key, self._protocol), headers=headers)
-            response.raise_for_status()
+        if isinstance(key, str):
+            server = ""
+            retries = 0
+            response = None
+            fetch_value = self.get(key)
+            if fetch_value is not None and len(fetch_value) > 0:
+                vector_clock = fetch_value[0][1]
+                while retries < self._server_length and response is None:
+                    try:
+                        server = self._servers[retries][0]
+                        clock = helper.build_vector_clock(vector_clock, None, None, None)
+                        headers = helper.build_delete_headers(self._connection_timeout, clock)
+                        response = requests.delete(helper.build_url(server, self._store_name, key), headers=headers)
+                        response.raise_for_status()
+                    except (ConnectionError, HTTPError, Timeout) as error:
+                        if (retries + 1) < self._server_length:
+                            if self._debug:
+                                logging.debug("The value couldn't be deleted on %s." % server)
+                            retries = retries + 1
+                            response = None
+                        else:
+                            raise VoldemortException("The value couldn't be deleted.")
+        else:
+            raise VoldemortException("The key isn't a string.")
 
     def _extract_messages(self, response_content):
         """
@@ -127,3 +201,37 @@ class VoldemortClient:
             else:
                 messages_text.append(text[value:])
         return [email.message_from_string(message) for message in messages_text]
+
+    def _is_valid(self, servers, store_name, debug, connection_timeout):
+        valid = False
+        if self._is_valid_servers(servers) and self._is_valid_store_name(store_name) and self._is_valid_debug(debug) and self._is_valid_connection_timeout(connection_timeout):
+            valid = True
+        return valid
+
+    def _is_valid_servers(self, servers):
+        server_regex = re.compile("^(https?)://([a-z0-9\-._~%]+|\[[a-z0-9\-._~%°$&'()*+,;=:]+\])(:[0-9]+)?$")
+        if isinstance(servers, list):
+            for server in servers:
+                if isinstance(server, tuple):
+                    if isinstance(server[0], str) and isinstance(server[1], int):
+                        server_matcher = server_regex.match(server[0])
+                        if server_matcher is not None:
+                            continue
+                        else:
+                            return False
+                    else:
+                        return False
+                else:
+                    return False
+            return True
+        else:
+            return False
+
+    def _is_valid_store_name(self, store_name):
+        return isinstance(store_name, str)
+
+    def _is_valid_debug(self, debug):
+        return isinstance(debug, bool)
+
+    def _is_valid_connection_timeout(self, connection_timeout):
+        return isinstance(connection_timeout, int)
