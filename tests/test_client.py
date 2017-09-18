@@ -1,5 +1,3 @@
-from voldemort_client.client import VoldemortClient
-
 class TestVoldemortClient:
     """
     This is the test class for the VoldemortClient class.

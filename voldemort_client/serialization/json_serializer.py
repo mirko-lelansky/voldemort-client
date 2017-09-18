@@ -6,11 +6,7 @@ import struct
 import simplejson
 from xml.dom import minidom
 
-# get the real OrderedDict if we're on 2.7
-try:
-    from collections import OrderedDict
-except ImportError as e:
-    from ordered_dict import OrderedDict
+from collections import OrderedDict
 
 
 TYPES = {
@@ -150,11 +146,11 @@ class JsonTypeSerializer(object):
                 self._typedef = typeobj
         else:
             self._typedef = dict((k, simplejson.loads(v, object_pairs_hook=OrderedDict))
-                                for k, v in typedef.iteritems())
+                                for k, v in typedef.items())
 
 
-    @staticmethod
-    def create_from_xml(node):
+    @classmethod
+    def configure_from_xml(cls, node):
         r"""
         Static factory method that creates a serializer from then XML description in a
         stores.xml file.
@@ -248,7 +244,7 @@ class JsonTypeSerializer(object):
         r"""
         Reads a serialized object from the file-like object input:
 
-        >>> f = StringIO.StringIO('\x00\x00\x00*')
+        >>> f = StringIO('\x00\x00\x00*')
         >>> s = JsonTypeSerializer('"int32"')
         >>> s.read(f)
         42
@@ -258,13 +254,13 @@ class JsonTypeSerializer(object):
 
         More complex types are also supported:
         >>> s = JsonTypeSerializer('{ "a":"float32", "b":["int16"], "c":"string" }')
-        >>> f = StringIO.StringIO(non_versioned)
+        >>> f = StringIO(non_versioned)
         >>> s.read(f) == {'a': 0.25, 'b': [1, 2, 3], 'c':u'foo'}
         True
 
         Non-versioned serializers can't read versioned binary representations:
 
-        >>> f = StringIO.StringIO(versioned)
+        >>> f = StringIO(versioned)
         >>> s.read(f)
         Traceback (most recent call last):
         ...
@@ -273,11 +269,11 @@ class JsonTypeSerializer(object):
         And vice-version, versioned serializers will only read versioned binary representations:
 
         >>> s = JsonTypeSerializer('{ "a":"float32", "b":["int16"], "c":"string" }', has_version=True)
-        >>> f = StringIO.StringIO(versioned)
+        >>> f = StringIO(versioned)
         >>> s.read(f) == {'a': 0.25, 'b': [1, 2, 3], 'c': u'foo'}
         True
 
-        >>> f = StringIO.StringIO(non_versioned)
+        >>> f = StringIO(non_versioned)
         >>> s.read(f)
         Traceback (most recent call last):
         ...
@@ -294,7 +290,7 @@ class JsonTypeSerializer(object):
 
         return self._read(input, typedef)
 
-    def reads(self, s):
+    def read(self, s):
         r"""
         Reads a serialized object from given string:
 
@@ -326,21 +322,21 @@ class JsonTypeSerializer(object):
         KeyError: 1
         """
 
-        return self.read(StringIO.StringIO(s))
+        return self.read(StringIO(s))
 
     def write(self, output, obj):
         r"""
         Writes the serialized binary representation of an object to the file-like object output:
 
         >>> s = JsonTypeSerializer('{ "a":"float32", "b":["int16"], "c":"string" }')
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s.write(f, {'a': 0.25, 'b':[1,2,3], 'c':'foo'})
         >>> f.getvalue()
         '\x01>\x80\x00\x00\x00\x03\x00\x01\x00\x02\x00\x03\x00\x03foo'
 
         The representation of a versioned serializer will have the version number byte prefix:
         >>> s = JsonTypeSerializer('{ "a":"float32", "b":["int16"], "c":"string" }', has_version=True)
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s.write(f, {'a': 0.25, 'b':[1,2,3], 'c':'foo'})
         >>> f.getvalue()
         '\x00\x01>\x80\x00\x00\x00\x03\x00\x01\x00\x02\x00\x03\x00\x03foo'
@@ -355,7 +351,7 @@ class JsonTypeSerializer(object):
 
         self._write(output, obj, typedef)
 
-    def writes(self, obj):
+    def write(self, obj):
         r"""
         Returns a string representing the serialized binary representation of obj:
 
@@ -390,7 +386,7 @@ class JsonTypeSerializer(object):
         True
         """
 
-        sfile = StringIO.StringIO()
+        sfile = StringIO()
         self.write(sfile, obj)
         return sfile.getvalue()
 
@@ -399,7 +395,7 @@ class JsonTypeSerializer(object):
         Internal routine for reading a complex type:
 
         >>> s = JsonTypeSerializer('"int32"')
-        >>> f = StringIO.StringIO('\x01>\x80\x00\x00\x00\x03\x00\x01\x00\x02\x00\x03\x00\x03foo')
+        >>> f = StringIO('\x01>\x80\x00\x00\x00\x03\x00\x01\x00\x02\x00\x03\x00\x03foo')
         >>> obj = s._read(f, OrderedDict((('a','float32'), ('b',['int16']), ('c','string'))))
         >>> obj == {'a': 0.25, 'c': u'foo', 'b': [1, 2, 3]}
         True
@@ -422,20 +418,20 @@ class JsonTypeSerializer(object):
         Internal routine for reading booleans:
 
         >>> s = JsonTypeSerializer('"int32"')
-        >>> s._read_boolean(StringIO.StringIO('\x00'))
+        >>> s._read_boolean(StringIO('\x00'))
         False
 
-        >>> s._read_boolean(StringIO.StringIO('\x01'))
+        >>> s._read_boolean(StringIO('\x01'))
         True
 
         Negative int8s indicate "None":
 
-        >>> s._read_boolean(StringIO.StringIO('\xff')) is None
+        >>> s._read_boolean(StringIO('\xff')) is None
         True
 
         Positive int8s are treated as True, even though _write_boolean() will always write \x01:
 
-        >>> s._read_boolean(StringIO.StringIO('\x05'))
+        >>> s._read_boolean(StringIO('\x05'))
         True
         """
 
@@ -453,48 +449,48 @@ class JsonTypeSerializer(object):
 
         >>> s = JsonTypeSerializer('"string"')
 
-        >>> s._read_numeric(StringIO.StringIO('*'), 'int8')
+        >>> s._read_numeric(StringIO('*'), 'int8')
         42
-        >>> s._read_numeric(StringIO.StringIO('\x00*'), 'int16')
+        >>> s._read_numeric(StringIO('\x00*'), 'int16')
         42
-        >>> s._read_numeric(StringIO.StringIO('\x00\x00\x00*'), 'int32')
+        >>> s._read_numeric(StringIO('\x00\x00\x00*'), 'int32')
         42
-        >>> s._read_numeric(StringIO.StringIO('\x00\x00\x00\x00\x00\x00\x00*'), 'int64')
+        >>> s._read_numeric(StringIO('\x00\x00\x00\x00\x00\x00\x00*'), 'int64')
         42
 
-        >>> s._read_numeric(StringIO.StringIO('>\x80\x00\x00'), 'float32')
+        >>> s._read_numeric(StringIO('>\x80\x00\x00'), 'float32')
         0.25
-        >>> s._read_numeric(StringIO.StringIO('?\xd0\x00\x00\x00\x00\x00\x00'), 'float64')
+        >>> s._read_numeric(StringIO('?\xd0\x00\x00\x00\x00\x00\x00'), 'float64')
         0.25
 
         Inputs corresponding to the smallest of each respective type are read as None:
 
-        >>> s._read_numeric(StringIO.StringIO('\x80'), 'int8') is None
+        >>> s._read_numeric(StringIO('\x80'), 'int8') is None
         True
-        >>> s._read_numeric(StringIO.StringIO('\x80\x00'), 'int16') is None
+        >>> s._read_numeric(StringIO('\x80\x00'), 'int16') is None
         True
-        >>> s._read_numeric(StringIO.StringIO('\x80\x00\x00\x00'), 'int32') is None
+        >>> s._read_numeric(StringIO('\x80\x00\x00\x00'), 'int32') is None
         True
-        >>> s._read_numeric(StringIO.StringIO('\x80\x00\x00\x00\x00\x00\x00\x00'), 'int64') is None
+        >>> s._read_numeric(StringIO('\x80\x00\x00\x00\x00\x00\x00\x00'), 'int64') is None
         True
 
-        >>> s._read_numeric(StringIO.StringIO('\x00\x00\x00\x01'), 'float32') is None
+        >>> s._read_numeric(StringIO('\x00\x00\x00\x01'), 'float32') is None
         True
-        >>> s._read_numeric(StringIO.StringIO('\x00\x00\x00\x00\x00\x00\x00\x01'), 'float64') is None
+        >>> s._read_numeric(StringIO('\x00\x00\x00\x00\x00\x00\x00\x01'), 'float64') is None
         True
 
         An insufficiently large input will cause an error:
-        >>> s._read_numeric(StringIO.StringIO('\x00*'), 'int32')
+        >>> s._read_numeric(StringIO('\x00*'), 'int32')
         Traceback (most recent call last):
         ...
         SerializationException: Unexpected end of input.
 
         An excessively large one will leave dangling input, which may cause problems down the line
         as well as returning the wrong value:
-        >>> s._read_numeric(StringIO.StringIO('\x00\x00\x00*'), 'int16')
+        >>> s._read_numeric(StringIO('\x00\x00\x00*'), 'int16')
         0
 
-        >>> s._read_numeric(StringIO.StringIO('?\xd0\x00\x00\x00\x00\x00\x00'), 'float32') == 0.25
+        >>> s._read_numeric(StringIO('?\xd0\x00\x00\x00\x00\x00\x00'), 'float32') == 0.25
         False
         """
 
@@ -516,20 +512,20 @@ class JsonTypeSerializer(object):
         >>> s = JsonTypeSerializer('"string"')
 
         An int16 -1 value is treated as -1:
-        >>> s._read_length(StringIO.StringIO('\xff\xff'))
+        >>> s._read_length(StringIO('\xff\xff'))
         -1
 
         A positive int16 is treated as a short length:
-        >>> s._read_length(StringIO.StringIO('\x00\x05'))
+        >>> s._read_length(StringIO('\x00\x05'))
         5
 
         A negative int16 in the first two bytes is a signal that it's really an int32 length:
-        >>> s._read_length(StringIO.StringIO('\xff\x00\x00\x00'))
+        >>> s._read_length(StringIO('\xff\x00\x00\x00'))
         1056964608
 
         But any 32-bit length between 0x3fff0000-0x3fffffff will be misinterpreted as -1 (this
         is a bug, but it's identical behavior to the java version):
-        >>> s._read_length(StringIO.StringIO('\xff\xff\x00\x05'))
+        >>> s._read_length(StringIO('\xff\xff\x00\x05'))
         -1
         """
 
@@ -550,18 +546,18 @@ class JsonTypeSerializer(object):
 
         >>> s = JsonTypeSerializer('"string"')
 
-        >>> s._read_bytes(StringIO.StringIO('\x00\x03foo'))
+        >>> s._read_bytes(StringIO('\x00\x03foo'))
         'foo'
 
         A length of 0 is the empty string:
-        >>> s._read_bytes(StringIO.StringIO('\x00\x00'))
+        >>> s._read_bytes(StringIO('\x00\x00'))
         ''
 
         A negative length is None:
-        >>> s._read_bytes(StringIO.StringIO('\xff\xff'))
+        >>> s._read_bytes(StringIO('\xff\xff'))
 
         We get an error if the data is too short:
-        >>> s._read_bytes(StringIO.StringIO('\x00\x0afoo'))
+        >>> s._read_bytes(StringIO('\x00\x0afoo'))
         Traceback (most recent call last):
         ...
         SerializationException: Unexpected end of input.
@@ -585,18 +581,18 @@ class JsonTypeSerializer(object):
 
         >>> s = JsonTypeSerializer('"string"')
 
-        >>> s._read_string(StringIO.StringIO('\x00\x03foo'))
+        >>> s._read_string(StringIO('\x00\x03foo'))
         u'foo'
 
         A length of 0 is the empty string:
-        >>> s._read_string(StringIO.StringIO('\x00\x00'))
+        >>> s._read_string(StringIO('\x00\x00'))
         u''
 
         A negative length is None:
-        >>> s._read_string(StringIO.StringIO('\xff\xff'))
+        >>> s._read_string(StringIO('\xff\xff'))
 
         We get an error if the data is too short:
-        >>> s._read_string(StringIO.StringIO('\x00\x0afoo'))
+        >>> s._read_string(StringIO('\x00\x0afoo'))
         Traceback (most recent call last):
         ...
         SerializationException: Unexpected end of input.
@@ -616,11 +612,11 @@ class JsonTypeSerializer(object):
         Internal routine that reads a date:
 
         >>> s = JsonTypeSerializer('"string"')
-        >>> s._read_date(StringIO.StringIO('\x00\x00\x01,~\x90\x84\x82'))
+        >>> s._read_date(StringIO('\x00\x00\x01,~\x90\x84\x82'))
         datetime.datetime(2010, 11, 24, 15, 46, 29, 122000)
 
         The byte string corresponding to the smallest int64 deserializes to None:
-        >>> s._read_date(StringIO.StringIO('\x80\x00\x00\x00\x00\x00\x00\x00'))
+        >>> s._read_date(StringIO('\x80\x00\x00\x00\x00\x00\x00\x00'))
         """
 
         javaDate = self._read_int64(input)
@@ -633,31 +629,31 @@ class JsonTypeSerializer(object):
         Internal routine for reading lists:
 
         >>> s = JsonTypeSerializer('"string"')
-        >>> s._read_list(StringIO.StringIO('\x00\x03\x00\x01\x00\x02\x00\x03'), ['int16'])
+        >>> s._read_list(StringIO('\x00\x03\x00\x01\x00\x02\x00\x03'), ['int16'])
         [1, 2, 3]
 
         List typedefs must be singleton lists:
-        >>> s._read_list(StringIO.StringIO('\x00\x03\x00\x01\x00\x02\x00\x03'), [])
+        >>> s._read_list(StringIO('\x00\x03\x00\x01\x00\x02\x00\x03'), [])
         Traceback (most recent call last):
         ...
         SerializationException: Expected single element typedef, but got: 0
 
-        >>> s._read_list(StringIO.StringIO('\x00\x03\x00\x01\x00\x02\x00\x03'), ['int16', 'int32'])
+        >>> s._read_list(StringIO('\x00\x03\x00\x01\x00\x02\x00\x03'), ['int16', 'int32'])
         Traceback (most recent call last):
         ...
         SerializationException: Expected single element typedef, but got: 2
 
-        >>> s._read_list(StringIO.StringIO('\x00\x03\x00\x01\x00\x02\x00\x03'), 'int16')
+        >>> s._read_list(StringIO('\x00\x03\x00\x01\x00\x02\x00\x03'), 'int16')
         Traceback (most recent call last):
         ...
         SerializationException: Wrong type: expected list but got: <type 'str'>
 
         A length of -1 return None:
-        >>> s._read_list(StringIO.StringIO('\xff\xff'), ['int16']) is None
+        >>> s._read_list(StringIO('\xff\xff'), ['int16']) is None
         True
 
         A length of 0 is an empty list:
-        >>> s._read_list(StringIO.StringIO('\x00\x00'), ['int16'])
+        >>> s._read_list(StringIO('\x00\x00'), ['int16'])
         []
         """
 
@@ -679,19 +675,19 @@ class JsonTypeSerializer(object):
         Internal routine for reading dicts:
 
         >>> s = JsonTypeSerializer('"string"')
-        >>> obj = s._read_dict(StringIO.StringIO('\x01\x00\x01\x00\x02'), OrderedDict((('a','int16'), ('b','int16'))))
+        >>> obj = s._read_dict(StringIO('\x01\x00\x01\x00\x02'), OrderedDict((('a','int16'), ('b','int16'))))
         >>> obj == {'a': 1, 'b': 2}
         True
 
         Typedef has to be a map:
-        >>> s._read_dict(StringIO.StringIO('\x01\x00\x01\x00\x02'), ['int16'])
+        >>> s._read_dict(StringIO('\x01\x00\x01\x00\x02'), ['int16'])
         Traceback (most recent call last):
         ...
         SerializationException: Wrong typedef type: expected dict but got: <type 'list'>
 
 
         If the serialized blob starts with (int8) -1, then the map is read as None:
-        >>> s._read_dict(StringIO.StringIO('\xff'), OrderedDict((('a','int16'), ('b','int16')))) is None
+        >>> s._read_dict(StringIO('\xff'), OrderedDict((('a','int16'), ('b','int16')))) is None
         True
         """
 
@@ -702,7 +698,7 @@ class JsonTypeSerializer(object):
             raise SerializationException("Wrong typedef type: expected dict but got: %s" % type(typedef))
 
         m = {}
-        for key, entrytype in typedef.iteritems():
+        for key, entrytype in typedef.items():
             m[key] = self._read(input, entrytype)
 
         return m
@@ -712,53 +708,53 @@ class JsonTypeSerializer(object):
         Internal routine that serializes objects according to the passed in typedef.
 
         >>> s = JsonTypeSerializer('"string"')
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write(f, True, 'boolean')
         >>> f.getvalue()
         '\x01'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write(f, 42, 'int8')
         >>> f.getvalue()
         '*'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write(f, 42, 'int16')
         >>> f.getvalue()
         '\x00*'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write(f, 42, 'int32')
         >>> f.getvalue()
         '\x00\x00\x00*'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write(f, 42, 'int64')
         >>> f.getvalue()
         '\x00\x00\x00\x00\x00\x00\x00*'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write(f, 0.25, 'float32')
         >>> f.getvalue()
         '>\x80\x00\x00'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write(f, 0.25, 'float64')
         >>> f.getvalue()
         '?\xd0\x00\x00\x00\x00\x00\x00'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write(f, [1,2,3], ['int16'])
         >>> f.getvalue()
         '\x00\x03\x00\x01\x00\x02\x00\x03'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write(f, {'a':1, 'b':2}, OrderedDict((('a', 'int16'), ('b', 'int16'))))
         >>> f.getvalue()
         '\x01\x00\x01\x00\x02'
 
         It does some typechecking on the typedef parameter:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write(f, 42, 0)
         Traceback (most recent call last):
         ...
@@ -790,25 +786,25 @@ class JsonTypeSerializer(object):
         >>> s = JsonTypeSerializer('"string"')
 
         True is 1:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_boolean(f, True)
         >>> f.getvalue()
         '\x01'
 
         False is 0:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_boolean(f, False)
         >>> f.getvalue()
         '\x00'
 
         None is serialized to (int8)-1:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_boolean(f, None)
         >>> f.getvalue()
         '\xff'
 
         Only booleans are accepted:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_boolean(f, 42)
         Traceback (most recent call last):
         ...
@@ -833,88 +829,88 @@ class JsonTypeSerializer(object):
 
         >>> s = JsonTypeSerializer('"string"')
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, 42, 'int8')
         >>> f.getvalue()
         '*'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, 42, 'int16')
         >>> f.getvalue()
         '\x00*'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, 42, 'int32')
         >>> f.getvalue()
         '\x00\x00\x00*'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, 42, 'int64')
         >>> f.getvalue()
         '\x00\x00\x00\x00\x00\x00\x00*'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, 0.25, 'float32')
         >>> f.getvalue()
         '>\x80\x00\x00'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, 0.25, 'float64')
         >>> f.getvalue()
         '?\xd0\x00\x00\x00\x00\x00\x00'
 
         None is serialized to the minimum value for each type:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, None, 'int8')
         >>> f.getvalue()
         '\x80'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, None, 'int16')
         >>> f.getvalue()
         '\x80\x00'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, None, 'int32')
         >>> f.getvalue()
         '\x80\x00\x00\x00'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, None, 'int64')
         >>> f.getvalue()
         '\x80\x00\x00\x00\x00\x00\x00\x00'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, None, 'float32')
         >>> f.getvalue()
         '\x00\x00\x00\x01'
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, None, 'float64')
         >>> f.getvalue()
         '\x00\x00\x00\x00\x00\x00\x00\x01'
 
         Basic typechecking is done:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, 0.25, 'int16')
         Traceback (most recent call last):
         ...
         SerializationException: Invalid type: <type 'float'> for typedef: int16
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, 42, 'float32')
         Traceback (most recent call last):
         ...
         SerializationException: Invalid type: <type 'int'> for typedef: float32
 
         Range checking is also done:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, 500, 'int8')
         Traceback (most recent call last):
         ...
         SerializationException: Value 500 out of range for typedef: int8
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_numeric(f, 1.0e-45, 'float32')
         Traceback (most recent call last):
         ...
@@ -945,19 +941,19 @@ class JsonTypeSerializer(object):
         >>> s = JsonTypeSerializer('"string"')
         >>> d = datetime.datetime(2010, 11, 24, 17, 36, 11, 410413)
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_date(f, d)
         >>> f.getvalue()
         '\x00\x00\x01,~\xf4\xf4\x92'
 
         None serializers to the smallest representable int64:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_date(f, None)
         >>> f.getvalue()
         '\x80\x00\x00\x00\x00\x00\x00\x00'
 
         Object passed in must be a date
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_date(f, 42)
         Traceback (most recent call last):
         ...
@@ -980,19 +976,19 @@ class JsonTypeSerializer(object):
 
         >>> s = JsonTypeSerializer('"string"')
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_bytes(f, 'foo')
         >>> f.getvalue()
         '\x00\x03foo'
 
         None is serialized as -1 length byte string:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_bytes(f, None)
         >>> f.getvalue()
         '\xff\xff'
 
         The empty string is a 0 length byte string:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_bytes(f, '')
         >>> f.getvalue()
         '\x00\x00'
@@ -1012,32 +1008,32 @@ class JsonTypeSerializer(object):
         >>> s = JsonTypeSerializer('"string"')
 
         Small lengths are encoded as int16s:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_length(f, 10)
         >>> f.getvalue()
         '\x00\n'
 
         Length of -1 (magic length of null sequences) is encoded as (int16)-1:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_length(f, -1)
         >>> f.getvalue()
         '\xff\xff'
 
         Longer lengths are encoded as int32s with the high two bits set:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_length(f, 1000000)
         >>> f.getvalue()
         '\xc0\x0fB@'
 
         Lengths between 0x3fff0000 and 0x3fffffff are supposed to be supported but will serialize
         to a byte string that won't get decoded properly:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_length(f, 0x3fff0001)
         >>> bytes = f.getvalue()
         >>> bytes
         '\xff\xff\x00\x01'
 
-        >>> s._read_length(StringIO.StringIO(bytes))
+        >>> s._read_length(StringIO(bytes))
         -1
 
         """
@@ -1055,32 +1051,32 @@ class JsonTypeSerializer(object):
 
         >>> s = JsonTypeSerializer('"string"')
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_string(f, 'foo')
         >>> f.getvalue()
         '\x00\x03foo'
 
         Unicode works, too:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_string(f, u'foo')
         >>> f.getvalue()
         '\x00\x03foo'
 
         Other types will cause an error:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_string(f, 42)
         Traceback (most recent call last):
         ...
         SerializationException: Expected string or unicode and got: <type 'int'>
 
         The empty string turns into a zero-length string:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_string(f, u'')
         >>> f.getvalue()
         '\x00\x00'
 
         None turns into a -1 length string:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_string(f, None)
         >>> f.getvalue()
         '\xff\xff'
@@ -1099,44 +1095,44 @@ class JsonTypeSerializer(object):
 
         >>> s = JsonTypeSerializer('"string"')
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_list(f, [1,2,3], ['int16'])
         >>> f.getvalue()
         '\x00\x03\x00\x01\x00\x02\x00\x03'
 
         Empty lists are encoded as length 0:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_list(f, [], ['int16'])
         >>> f.getvalue()
         '\x00\x00'
 
         None is encoded as length -1:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_list(f, None, ['int16'])
         >>> f.getvalue()
         '\xff\xff'
 
         Input must be a list:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_list(f, 1, ['int16'])
         Traceback (most recent call last):
         ...
         TypeError: object of type 'int' has no len()
 
         Typedef must be a singleton list:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_list(f, [1,2,3], [])
         Traceback (most recent call last):
         ...
         SerializationException: Type declaration of a list must be a singleton list.
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_list(f, [1,2,3], ['int16', 'int16'])
         Traceback (most recent call last):
         ...
         SerializationException: Type declaration of a list must be a singleton list.
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_list(f, [1,2,3], 'int16')
         Traceback (most recent call last):
         ...
@@ -1161,31 +1157,31 @@ class JsonTypeSerializer(object):
 
         >>> s = JsonTypeSerializer('"string"')
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_dict(f, {'a':1, 'b':2}, OrderedDict((('a','int16'), ('b','int32'))))
         >>> f.getvalue()
         '\x01\x00\x01\x00\x00\x00\x02'
 
         None will serialize as (int8)-1:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_dict(f, None, OrderedDict((('a','int16'), ('b','int32'))))
         >>> f.getvalue()
         '\xff'
 
         The passed in dict must have the same fields as the typedef:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_dict(f, {'a':1}, OrderedDict((('a','int16'), ('b','int32'))))
         Traceback (most recent call last):
         ...
         SerializationException: Size mismatch for dict: expected 2 but got 1.
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_dict(f, {'a':1, 'b':2, 'c':3}, OrderedDict((('a','int16'), ('b','int32'))))
         Traceback (most recent call last):
         ...
         SerializationException: Size mismatch for dict: expected 2 but got 3.
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_dict(f, {'b':2, 'c':3}, OrderedDict((('a','int16'), ('b','int32'))))
         Traceback (most recent call last):
         ...
@@ -1193,14 +1189,14 @@ class JsonTypeSerializer(object):
         
         The object being serialized must be a dict:
 
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_dict(f, [1,2], OrderedDict((('a','int16'), ('b','int32'))))
         Traceback (most recent call last):
         ...
         SerializationException: Object must be a dict but got: <type 'list'>
 
         The typedef must be an OrderedDict:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_dict(f, {'b':2, 'c':3}, ['int16'])
         Traceback (most recent call last):
         ...
@@ -1208,7 +1204,7 @@ class JsonTypeSerializer(object):
 
         We can't use plain dicts as the typedef, because ordering is significant and plain old dicts
         don't guarantee order:
-        >>> f = StringIO.StringIO()
+        >>> f = StringIO()
         >>> s._write_dict(f, {'b':2, 'c':3}, {'a':'int16', 'b':'int16'})
         Traceback (most recent call last):
         ...
@@ -1229,7 +1225,7 @@ class JsonTypeSerializer(object):
             raise SerializationException("Size mismatch for dict: expected %d but got %d." % (len(typedef), len(items)))
 
         self._write_int8(output, 1)
-        for key, entrytype in typedef.iteritems():
+        for key, entrytype in typedef.items():
             if key not in items:
                 raise SerializationException("Missing key: '%s' required by type: %s" % (key, typedef))
 
