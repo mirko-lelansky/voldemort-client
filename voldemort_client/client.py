@@ -14,7 +14,7 @@ class VoldemortClient:
     """
 
     def __init__(self, servers, store_name, connection_timeout=3, debug=False,
-            server_max_key_length=None, server_max_value_length=None):
+                 server_max_key_length=None, server_max_value_length=None):
         """
         This is the constructor method of the class.
 
@@ -41,6 +41,21 @@ class VoldemortClient:
         self._server_max_key_length = server_max_key_length
         self._server_max_value_length = server_max_value_length
         self._server_length = len(self._servers)
+        self._keys = []
+
+    def add(self, key, value, timeout=None):
+        """
+        """
+        fetch_value = self.get(key)
+        if fetch_value is not None:
+            return self.set(key, value, timeout)
+        else:
+            raise VoldemortException("The key already exists.")
+
+    def clear(self):
+        for key in self._keys:
+            self.delete(key)
+        self._keys.clear()
 
     def get(self, key):
         """
@@ -49,40 +64,17 @@ class VoldemortClient:
         :param key: the key to fetch
         :type key: str
         """
-        if isinstance(key, str):
-            server = ""
-            retries = 0
-            response = None
-            while retries < self._server_length and response is None:
-                try:
-                    server = self._servers[retries][0]
-                    headers = helper.build_get_headers(self._connection_timeout)
-                    response = requests.get(helper.build_url(server,
-                        self._store_name, key), headers=headers)
-                    response.raise_for_status()
-                except (ConnectionError, HTTPError, Timeout) as error:
-                    if (retries + 1) < self._server_length:
-                        if self._debug:
-                            logging.debug("The value couldn't be fetched from server %s." % server)
-                        retries = retries + 1
-                        response = None
-                    else:
-                        if isinstance(error, ConnectionError) or isinstance(error, Timeout):
-                            raise ConnectionException("No connection couldn't established.")
-                        elif isinstance(error, HTTPError) and response.status_code == 404:
-                            return []
-                        else:
-                            raise VoldemortException("An unknown exception occured.")
-            messages = self._extract_messages(response.content)
-            sub_messages = [message.get_payload()[0] for message in messages]
-            result = []
-            for sub_message in sub_messages:
-                header = sub_message.get("X-VOLD-Vector-Clock")
-                vector_clock = json.loads(header)
-                result.append((sub_message.get_payload(), vector_clock))
-            return result
+        headers = helper.build_get_headers(self._connection_timeout)
+        content = self._get(key, headers)
+        if not content:
+            return None
         else:
-            raise VoldemortException("The key isn't a string.")
+            message_str = content.decode()
+            lines = message_str.split("\r\n")
+            message_lines = lines[1:-2]
+            msg = '\r\n'.join(message_lines)
+            message = email.message_from_string(msg)
+            return message.get_payload()
 
      def get_all(self, keys):
          """
@@ -91,9 +83,26 @@ class VoldemortClient:
          :param keys: the list of keys
          :type keys: list
          """
-         return self.get(', '.join(keys))
+         headers = helper.build_get_headers(self._connection_timeout)
+         content = self._get(','.join(keys), headers)
+         if not content:
+             return None
+         else:
+             messages = self._extract_messages(content)
+             sub_messages = [message.get_payload()[0] for message in messages]
+             return [(sub_message.get_payload(), json.loads(sub_message.get("X-VOLD-Vector-Clock"))) for sub_message in sub_messages]
 
-    def set(self, key, value, timeout=None):
+    def get_version(self, key):
+        """
+        """
+        headers = helper.build_version_headers(self._connection_timeout)
+        content = self._get(key, headers)
+        if not content:
+            return None
+        else:
+            return json.loads(content)[0]
+
+    def set(self, key, value, timeout):
         """
         This method sets the value on the server.
 
@@ -108,36 +117,30 @@ class VoldemortClient:
             server = ""
             retries = 0
             response = None
-            vector_clock = None
-            versions = None
-            try:
-                fetch_value = self.get(key)
-                if fetch_value is not None and len(fetch_value) > 0:
-                    vector_clock = fetch_value[0][1]
-                    versions = vector_clock["versions"]
-                    versions["version"] = versions["version"] + 1
-            except VoldemortException:
-                vector_clock = None
-                versions = None
+            clock = None
             while retries < self._server_length and response is None:
                 try:
                     server = self._servers[retries][0]
                     node_id = self._servers[retries][1]
-                    clock = helper.build_vector_clock(vector_clock, timeout,
-                            node_id, versions)
+                    vector_clock = self.get_version(key)
+                    if vector_clock is None:
+                        clock = helper.create_vector_clock(node_id, timeout)
+                    else:
+                        clock = helper.merge_vector_clock(vector_clock, node_id, timeout)
                     headers = helper.build_set_headers(self._connection_timeout,
-                            clock)
+                                                       clock)
                     response = requests.post(helper.build_url(server,
-                        self._store_name, key), headers=headers, data=value)
+                                                          self._store_name, key), headers=headers, data=value)
                     response.raise_for_status()
+                    return True
                 except (ConnectionError, HTTPError, Timeout) as error:
                     if (retries + 1) < self._server_length:
-                        if self._debug:
-                            logging.debug("The value couldn't be set on server %s." % server)
+                        self.debug("The value couldn't be set on server %s." % server)
                         retries = retries + 1
                         response = None
                     else:
-                        raise VoldemortException("The value couldn't be set.")
+                        self.debug("The value couldn't be set.")
+                        return False
         else:
             raise VoldemortException("The key isn't a string.")
 
@@ -152,27 +155,28 @@ class VoldemortClient:
             server = ""
             retries = 0
             response = None
-            fetch_value = self.get(key)
-            if fetch_value is not None and len(fetch_value) > 0:
-                vector_clock = fetch_value[0][1]
+            vector_clock = self.get_version(key)
+            if vector_clock is not None:
                 while retries < self._server_length and response is None:
                     try:
                         server = self._servers[retries][0]
-                        clock = helper.build_vector_clock(vector_clock, None,
-                                None, None)
+                        node_id = self._servers[retries][1]
+                        clock = helper.merge_vector_clock(vector_clock, node_id)
                         headers = helper.build_delete_headers(self._connection_timeout,
-                                clock)
+                                                              clock)
                         response = requests.delete(helper.build_url(server,
                             self._store_name, key), headers=headers)
                         response.raise_for_status()
+                        self._keys.remove(key)
+                        return True
                     except (ConnectionError, HTTPError, Timeout) as error:
                         if (retries + 1) < self._server_length:
-                            if self._debug:
-                                logging.debug("The value couldn't be deleted on %s." % server)
+                            self.debug("The value couldn't be deleted on %s." % server)
                             retries = retries + 1
                             response = None
                         else:
-                            raise VoldemortException("The value couldn't be deleted.")
+                            self.debug("The value couldn't be deleted.")
+                            return False
         else:
             raise VoldemortException("The key isn't a string.")
 
@@ -242,3 +246,34 @@ class VoldemortClient:
 
     def _is_valid_connection_timeout(self, connection_timeout):
         return isinstance(connection_timeout, int)
+
+    def _get(self, key, headers):
+        if isinstance(key, str):
+            server = ""
+            retries = 0
+            response = None
+            while retries < self._server_length and response is None:
+                try:
+                    server = self._servers[retries][0]
+                    response = requests.get(helper.build_url(server,
+                                                             self._store_name, key), headers=headers)
+                    response.raise_for_status()
+                    return response.content
+                except (ConnectionError, HTTPError, Timeout) as error:
+                    if (retries + 1) < self._server_length:
+                        self.debug("Couldn't execute the get request on the server: %s." % server)
+                        retries = retries + 1
+                        response = None
+                    else:
+                        if isinstance(error, ConnectionError) or isinstance(error, Timeout):
+                            raise ConnectionException("No connection couldn't established.")
+                        elif isinstance(error, HTTPError) and response.status_code == 404:
+                            return []
+                        else:
+                            raise VoldemortException("An unknown exception occured.")
+        else:
+            raise VoldemortException("The key isn't a string.")
+
+    def debug(self, msg):
+        if self._debug:
+            logging.debug(msg)
