@@ -12,25 +12,30 @@ from voldemort_client import helper
 from voldemort_client.exception import VoldemortError, RestError
 
 class VoldemortClient:
-    """
-    This class represents the REST-Client to the voldermort cluster.
-    """
+    """This class represents the REST-Client to the voldermort cluster."""
 
     def __init__(self, servers, store_name, connection_timeout=3000, debug=False,
                  max_length=(None, None)):
-        """
-        This is the constructor method of the class.
+        """This is the constructor method of the class.
+        
+        Parameters
+        ----------
+        
+        servers : list
+            the list of server tuples (url, node_id)
+        store_name : str
+            the name of the used store
+        connection_timeout : int
+            the timeout of the http connection in milli seconds
+        debug : bool
+            if true print more logging messages
+        max_length : tuple
+            the tuple of the key and value langth
 
-        :param servers: the list of server tuples (url, node_id)
-        :type servers: list
-        :param store_name: the name of the used store
-        :type store_name: str
-        :param connection_timeout: the timeout of the http connection in milli seconds
-        :type connection_timeout: int
-        :param debug: if true print more logging messages
-        :type debug: bool
-        :param max_length: the tuple of the key and value langth
-        :type max_length: tuple
+        Raises
+        ------
+        ValueError
+            If the input parameters not valid.
         """
         if not _is_valid(servers, store_name, debug, connection_timeout):
             raise ValueError("The class isn't correct initialised.")
@@ -44,18 +49,22 @@ class VoldemortClient:
         self._keys = []
 
     def add(self, key, value, timeout=None):
-        """
-        This method adds on key-value pair on the server but only if the key
+        """This method adds on key-value pair on the server but only if the key
         isn't on the server.
 
-        :param key: the key where the value should be stored
-        :type key: str
-        :param value: the content what should be stored
-        :type value: str
-        :param timeout: the expire timeout of the key
-        :type timeout: int
-        :return: True if success else False
-        :rtype: bool
+        Parameters
+        ----------
+        key : str
+            the key where the value should be stored
+        value : str
+            the content what should be stored
+        timeout : int
+            the expire timeout of the key
+
+        Returns
+        -------
+        bool
+            True if success else False
         """
         fetch_value = self.get(key)
         if fetch_value is not None:
@@ -64,21 +73,23 @@ class VoldemortClient:
             raise VoldemortError("The key already exists.")
 
     def clear(self):
-        """
-        This method clears all the keys on the cluster.
-        """
+        """This method clears all the keys on the cluster."""
         for key in self._keys:
             self.delete(key)
         self._keys.clear()
 
     def get(self, key):
-        """
-        This method returns the value for a specific key.
+        """This method returns the value for a specific key.
 
-        :param key: the key to fetch
-        :type key: str
-        :return: the value of the key or None
-        :rtype: str or None
+        Parameters
+        ----------
+        key : str
+            the key to fetch
+
+        Returns
+        -------
+        str
+            the value of the key or None
         """
         headers = helper.build_get_headers(self._connection_timeout)
         content = self._get(key, headers)
@@ -91,56 +102,67 @@ class VoldemortClient:
             return message.get_payload()
 
      def get_many(self, keys):
-         """
-         This method returns the values from the key list.
+         """This method returns the values from the key list.
 
-         :param keys: the keys to fetch
-         :type keys: list
-         :return: a dictinary where the keys are the founded keys and the
-         values the values of the keys or None
-         :rtype: dict or None
-         """
-         headers = helper.build_get_headers(self._connection_timeout)
-         content = self._get(','.join(keys), headers)
-         if content:
-             sub_messages = [(msg.get("Content-Location"), msg.get_payload()[0])
-                             for msg in messages]
-             result_list = [(sub_message[0].rsplit("/")[2], sub_message[1].get_payload())
-                            for sub_message in sub_messages]
-             messages = self._extract_messages(content)
-             result = {}
-             for location, value in result_list:
-                 for key in keys:
-                     if key.startswith(location):
-                         result[key] = value
+         Parameters
+         ----------
+         keys : list
+            the keys to fetch
+
+        Returns
+        -------
+        dict
+            the founded key-value-pairs or None
+        """
+        headers = helper.build_get_headers(self._connection_timeout)
+        content = self._get(','.join(keys), headers)
+        if content:
+            sub_messages = [(msg.get("Content-Location"), msg.get_payload()[0])
+                            for msg in messages]
+            result_list = [(sub_message[0].rsplit("/")[2], sub_message[1].get_payload())
+                           for sub_message in sub_messages]
+            messages = self._extract_messages(content)
+            result = {}
+            for location, value in result_list:
+                for key in keys:
+                    if key.startswith(location):
+                        result[key] = value
             return result
 
     def get_version(self, key):
-        """
-        This method returns the latest version number of an existing key.
+        """This method returns the latest version number of an existing key.
 
-        :param key: the key which should be lockup
-        :type key: str
-        :return: the version as dict
-        :rtype: dict
+        Parameters
+        ----------
+        key : str
+            the key which should be lockup
+
+        Returns
+        -------
+        dict
+            the version as dict
         """
         headers = helper.build_version_headers(self._connection_timeout)
         content = self._get(key, headers)
         if content:
             return json.loads(content)[0]
 
-    def set(self, key, value, timeout):
-        """
-        This method sets the value on the server.
+    def set(self, key, value, timeout=None):
+        """This method sets the value on the server.
 
-        :param key: the key under which the value should be store
-        :type key: str
-        :param value: the value to store
-        :type value: str
-        :param timeout: the expire time as timestamp
-        :type timeout: int or None
-        :return: True if success else False
-        :rtype: bool
+        Parameters
+        ----------
+        key : str
+            the key under which the value should be store
+        value : str
+            the value to store
+        timeout : int
+            the expire time as timestamp
+
+        Returns
+        -------
+        bool
+            True if success else False
         """
         if isinstance(key, str):
             server = ""
@@ -178,13 +200,17 @@ class VoldemortClient:
             raise VoldemortError("The key isn't a string.")
 
     def delete(self, key):
-        """
-        This method deletes an existing value.
+        """This method deletes an existing value.
 
-        :param key: the key to delete
-        :type key: str
-        :return: True if success else False
-        :rtype: bool
+        Parameters
+        ----------
+        key : str
+            the key to delete
+
+        Returns
+        -------
+        bool
+            True if success else False
         """
         if isinstance(key, str):
             server = ""
@@ -252,6 +278,8 @@ class VoldemortClient:
         return [email.message_from_string(message) for message in messages_text]
 
     def _get(self, key, headers):
+        """
+        """
         if isinstance(key, str):
             server = ""
             retries = 0
@@ -284,19 +312,23 @@ class VoldemortClient:
             logging.debug(msg)
 
 def _is_valid(servers, store_name, debug, connection_timeout):
-    """
-    This method validates the constructor method parameters.
+    """This method validates the constructor method parameters.
 
-    :param servers: the list of tuples of servers
-    :type servers: list
-    :param store_name: the name of the store to use
-    :type store_name: str
-    :param debug: the flag if the error messages should be printed
-    :type debug: bool
-    :param connection_timeout: the timeout for the reuqest
-    :type connection_timeout: int
-    :return: True if valid else False
-    :rtype: bool
+    Parameters
+    ----------
+    servers : list
+        the list of tuples of servers
+    store_name : str
+        the name of the store to use
+    debug : bool
+        the flag if the error messages should be printed
+    connection_timeout : int
+        the timeout for the reuqest
+
+    Returns
+    -------
+    bool
+        True if valid else False
     """
     valid = False
     if _is_valid_servers(servers) and _is_valid_store_name(store_name) and _is_valid_debug(debug) and _is_valid_connection_timeout(connection_timeout):
@@ -304,6 +336,8 @@ def _is_valid(servers, store_name, debug, connection_timeout):
     return valid
 
 def _is_valid_servers(servers):
+    """
+    """
     valid = True
     regex_pattern = r"^(https?)://([a-z0-9\-._~%]+|\[[a-z0-9\-._~%°$&'()*+,;=:]+\])(:[0-9]+)?$"
     server_regex = re.compile(regex_pattern)
@@ -327,10 +361,16 @@ def _is_valid_servers(servers):
     return False
 
 def _is_valid_store_name(store_name):
+    """
+    """
     return isinstance(store_name, str)
 
 def _is_valid_debug(debug):
+    """
+    """
     return isinstance(debug, bool)
 
 def _is_valid_connection_timeout(connection_timeout):
+    """
+    """
     return isinstance(connection_timeout, int)

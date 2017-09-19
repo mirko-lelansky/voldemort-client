@@ -13,7 +13,7 @@ Voldemort REST-Client documentation
 
    overview
    usage
-   api
+   modules
 
 
 ===================

@@ -7,15 +7,19 @@ from voldemort_client.exception import VoldemortError
 
 
 def create_vector_clock(node_id, timeout):
-    """
-    This method builds the initial vector clock for a new key.
+    """This method builds the initial vector clock for a new key.
 
-    :param node_id: the id of one node in the cluster
-    :type node_id: int
-    :param timeout: the expire timeout of the key
-    :type timeout: int
-    :return: the vector clock as dictonary
-    :rtype: dict
+    Parameters
+    ----------
+    node_id : int
+        the id of one node in the cluster
+    timeout : int
+        the expire timeout of the key
+
+    Returns
+    -------
+    dict
+        the vector clock as dictonary
     """
     if node_id is not None and timeout is not None:
         return {
@@ -27,17 +31,21 @@ def create_vector_clock(node_id, timeout):
 
 
 def merge_vector_clock(vector_clock, node_id, timeout=None):
-    """
-    This method merges an existing vector clock with the new values.
+    """This method merges an existing vector clock with the new values.
 
-    :param vector_clock: the vector clock which should be updated
-    :type vector_clock: dict
-    :param node_id: the node id to use
-    :type node_id: int
-    :param timeout: the expire timeout of the key
-    :type timeout: int
-    :return: the update vector clock as dictionary
-    :rtype: dict
+    Parameters
+    ----------
+    vector_clock : dict
+        the vector clock which should be updated
+    node_id : int
+        the node id to use
+    timeout : int
+        the expire timeout of the key
+
+    Returns
+    -------
+    dict
+        the update vector clock as dictionary
     """
     if vector_clock is not None and node_id is not None:
         versions = vector_clock["versions"]
@@ -62,14 +70,17 @@ def merge_vector_clock(vector_clock, node_id, timeout=None):
 
 
 def build_get_headers(request_timeout):
-    """
-    This method builds the request headers for get requests like receving keys.
+    """This method builds the request headers for get requests like receving keys.
 
-    :param request_timeout: the time where the request should be done in milli
-    seconds
-    :type request_timeout: int
-    :return: the headers as dictonary
-    :rtype: dict
+    Parameters
+    ----------
+    request_timeout : int
+        the time where the request should be done in milli seconds
+
+    Returns
+    -------
+    dict
+        the headers as dictonary
     """
     timestamp = datetime.now().timestamp()
     return {
@@ -79,17 +90,19 @@ def build_get_headers(request_timeout):
 
 
 def build_delete_headers(request_timeout, vector_clock):
-    """
-    This method builds the request headers for the delete requests.
+    """This method builds the request headers for the delete requests.
 
-    :param request_timeout: the time where the request should be done in milli
-    seconds
-    :type request_timeout: int
-    :param vector_clock: the vector clock which represents the version which
-    should be delete
-    :type vector_clock: dict
-    :return: the headers as dictionary
-    :rtype: dict
+    Parameters
+    ----------
+    request_timeout : int
+        the time where the request should be done in milli seconds
+    vector_clock : dict
+        the vector clock which represents the version which should be delete
+
+    Returns
+    -------
+    dict
+        the headers as dictionary
     """
     delete_headers = build_get_headers(request_timeout)
     delete_headers["X-VOLD-Vector-Clock"] = json.dumps(vector_clock)
@@ -97,19 +110,22 @@ def build_delete_headers(request_timeout, vector_clock):
 
 
 def build_set_headers(request_timeout, vector_clock, content_type="text/plain"):
-    """
-    This method builds the request headers for the set requests.
+    """This method builds the request headers for the set requests.
 
-    :param request_timeout: the time where the request should be done in milli
-    seconds
-    :type request_timeout: int
-    :param vector_clock: the vector clock which represents the version which
-    should be create or update
-    :type vector_clock: dict
-    :param content_type: the content type of the value
-    :type content_type: str
-    :return: the headers as dictionary
-    :rtype: dict
+    Parameters
+    ----------
+    request_timeout : int
+        the time where the request should be done in milli seconds
+    vector_clock : dict
+        the vector clock which represents the version which should be create or
+        update
+    content_type : str
+        the content type of the value
+
+    Returns
+    -------
+    dict
+        the headers as dictionary
     """
     set_headers = build_delete_headers(request_timeout, vector_clock)
     set_headers["Content-Type"] = content_type
@@ -117,14 +133,17 @@ def build_set_headers(request_timeout, vector_clock, content_type="text/plain"):
 
 
 def build_version_headers(request_timeout):
-    """
-    This method builds the request headers for the version requests.
+    """This method builds the request headers for the version requests.
 
-    :param request_timeout: the time where the request should be done in milli
-    seconds
-    :type request_timeout: int
-    :return: the headers as dictionary
-    :rtype: dict
+    Parameters
+    ----------
+    request_timeout : int
+        the time where the request should be done in milli seconds
+
+    Returns
+    --------
+    dict
+        the headers as dictionary
     """
     version_headers = build_get_headers(request_timeout)
     version_headers["X-VOLD-Get-Version"] = ""
@@ -132,16 +151,21 @@ def build_version_headers(request_timeout):
 
 
 def build_url(url, store_name, key):
-    """
-    This method combine the different parts of the urls to build the url to
+    """This method combine the different parts of the urls to build the url to
     acces the REST-API.
 
-    :param url: the base url
-    :type url: str
-    :param store_name: the name of the voldemort store
-    :type store_name: str
-    :param key: the url part which represents the key or keys
-    :return: the combined url of the REST-API
-    :rtype: str
+    Parameters
+    ----------
+    url : str
+        the base url
+    store_name : str
+        the name of the voldemort store
+    key : str
+        the url part which represents the key or keys
+
+    Returns
+    -------
+    str
+        the combined url of the REST-API
     """
     return "%s/%s/%s" % (url, store_name, key)
