@@ -9,7 +9,7 @@ class VoldemortError(Exception):
     """
     pass
 
-class RestException(VoldemortError):
+class RestError(VoldemortError):
     """
     This is the base exception class for the connection handling.
     """

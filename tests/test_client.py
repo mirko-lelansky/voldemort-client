@@ -28,5 +28,5 @@ class TestVoldemortClient:
         with requests_mock.Mocker() as mock:
             mock.get("http://localhost:8082/test1/a,b,c", status_code=404)
             client = VoldemortClient([("http://localhost:8082", 0)], "test1")
-            result = client.get_all(["a", "b", "c"])
+            result = client.get_many(["a", "b", "c"])
             assert None == result

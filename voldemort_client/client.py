@@ -17,10 +17,9 @@ class VoldemortClient:
     def __init__(self, servers, store_name, connection_timeout=3000, debug=False,
                  max_length=(None, None)):
         """This is the constructor method of the class.
-        
+
         Parameters
         ----------
-        
         servers : list
             the list of server tuples (url, node_id)
         store_name : str
@@ -101,12 +100,12 @@ class VoldemortClient:
             message = email.message_from_string(msg)
             return message.get_payload()
 
-     def get_many(self, keys):
-         """This method returns the values from the key list.
+    def get_many(self, keys):
+        """This method returns the values from the key list.
 
-         Parameters
-         ----------
-         keys : list
+        Parameters
+        ----------
+        keys : list
             the keys to fetch
 
         Returns
@@ -117,11 +116,11 @@ class VoldemortClient:
         headers = helper.build_get_headers(self._connection_timeout)
         content = self._get(','.join(keys), headers)
         if content:
+            messages = self._extract_messages(content)
             sub_messages = [(msg.get("Content-Location"), msg.get_payload()[0])
                             for msg in messages]
             result_list = [(sub_message[0].rsplit("/")[2], sub_message[1].get_payload())
                            for sub_message in sub_messages]
-            messages = self._extract_messages(content)
             result = {}
             for location, value in result_list:
                 for key in keys:
