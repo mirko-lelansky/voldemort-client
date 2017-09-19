@@ -9,11 +9,10 @@ from voldemort_client.exception import VoldemortException, ConnectionException
 
 class VoldemortClient:
     """
-    This class manages the connection to a voldemort cluster and provides
-    the accessing methods.
+    This class represents the REST-Client to the voldermort cluster.
     """
 
-    def __init__(self, servers, store_name, connection_timeout=3, debug=False,
+    def __init__(self, servers, store_name, connection_timeout=3000, debug=False,
                  server_max_key_length=None, server_max_value_length=None):
         """
         This is the constructor method of the class.
@@ -22,7 +21,7 @@ class VoldemortClient:
         :type servers: list
         :param store_name: the name of the used store
         :type store_name: str
-        :param connection_timeout: the timeout of the http connection in seconds
+        :param connection_timeout: the timeout of the http connection in milli seconds
         :type connection_timeout: int
         :param debug: if true print more logging messages
         :type debug: bool
@@ -45,6 +44,17 @@ class VoldemortClient:
 
     def add(self, key, value, timeout=None):
         """
+        This method adds on key-value pair on the server but only if the key
+        isn't on the server.
+
+        :param key: the key where the value should be stored
+        :type key: str
+        :param value: the content what should be stored
+        :type value: str
+        :param timeout: the expire timeout of the key
+        :type timeout: int
+        :return: True if success else False
+        :rtype: bool
         """
         fetch_value = self.get(key)
         if fetch_value is not None:
@@ -53,16 +63,21 @@ class VoldemortClient:
             raise VoldemortException("The key already exists.")
 
     def clear(self):
+        """
+        This method clears all the keys on the cluster.
+        """
         for key in self._keys:
             self.delete(key)
         self._keys.clear()
 
     def get(self, key):
         """
-        This method returns the value, versions pairs from the server.
+        This method returns the value for a specific key.
 
         :param key: the key to fetch
         :type key: str
+        :return: the value of the key or None
+        :rtype: str or None
         """
         headers = helper.build_get_headers(self._connection_timeout)
         content = self._get(key, headers)
@@ -80,8 +95,11 @@ class VoldemortClient:
          """
          This method returns the values from the key list.
 
-         :param keys: the list of keys
+         :param keys: the keys to fetch
          :type keys: list
+         :return: a dictinary where the keys are the founded keys and the
+         values the values of the keys or None
+         :rtype: dict or None
          """
          headers = helper.build_get_headers(self._connection_timeout)
          content = self._get(','.join(keys), headers)
@@ -100,6 +118,12 @@ class VoldemortClient:
 
     def get_version(self, key):
         """
+        This method returns the latest version number of an existing key.
+
+        :param key: the key which should be lockup
+        :type key: str
+        :return: the version as dict
+        :rtype: dict
         """
         headers = helper.build_version_headers(self._connection_timeout)
         content = self._get(key, headers)
@@ -118,6 +142,8 @@ class VoldemortClient:
         :type value: str
         :param timeout: the expire time as timestamp
         :type timeout: int or None
+        :return: True if success else False
+        :rtype: bool
         """
         if isinstance(key, str):
             server = ""
@@ -156,6 +182,8 @@ class VoldemortClient:
 
         :param key: the key to delete
         :type key: str
+        :return: True if success else False
+        :rtype: bool
         """
         if isinstance(key, str):
             server = ""
@@ -220,6 +248,20 @@ class VoldemortClient:
         return [email.message_from_string(message) for message in messages_text]
 
     def _is_valid(self, servers, store_name, debug, connection_timeout):
+        """
+        This method validates the constructor method parameters.
+
+        :param servers: the list of tuples of servers
+        :type servers: list
+        :param store_name: the name of the store to use
+        :type store_name: str
+        :param debug: the flag if the error messages should be printed
+        :type debug: bool
+        :param connection_timeout: the timeout for the reuqest
+        :type connection_timeout: int
+        :return: True if valid else False
+        :rtype: bool
+        """
         valid = False
         if self._is_valid_servers(servers) and self._is_valid_store_name(store_name) and self._is_valid_debug(debug) and self._is_valid_connection_timeout(connection_timeout):
             valid = True
