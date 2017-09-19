@@ -1,1 +1,4 @@
-__version__ = '0.3.2'
+"""
+This module holds the version of the client.
+"""
+__version__ = '0.3.3'

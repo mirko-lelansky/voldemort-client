@@ -1,6 +1,9 @@
-import simplejson as json
+"""
+This module contains some helper methods for building parts of http requests.
+"""
 from datetime import datetime
-from voldemort_client.exception import VoldemortException
+import simplejson as json
+from voldemort_client.exception import VoldemortError
 
 
 def create_vector_clock(node_id, timeout):
@@ -38,8 +41,9 @@ def merge_vector_clock(vector_clock, node_id, timeout=None):
     """
     if vector_clock is not None and node_id is not None:
         versions = vector_clock["versions"]
-        version_map_list_node = [version_map for version_map in versions if version_map["nodeId"] == node_id]
-        if len(version_map_list_node) == 0:
+        version_map_list_node = [version_map for version_map in versions
+                                 if version_map["nodeId"] == node_id]
+        if version_map_list_node == []:
             versions.append({"nodeId": node_id, "version": 1})
         elif len(version_map_list_node) == 1:
             old_map = version_map_list_node[0]
@@ -48,7 +52,7 @@ def merge_vector_clock(vector_clock, node_id, timeout=None):
             versions.remove(old_map)
             versions.append(new_map)
         else:
-            raise VoldemortException("Only one version map per node is allowed.")
+            raise VoldemortError("Only one version map per node is allowed.")
         vector_clock["versions"] = versions
         if timeout is not None:
             vector_clock["timestamp"] = timeout
@@ -61,15 +65,16 @@ def build_get_headers(request_timeout):
     """
     This method builds the request headers for get requests like receving keys.
 
-    :param request_timeout: the time where the request should be done in milli seconds
+    :param request_timeout: the time where the request should be done in milli
+    seconds
     :type request_timeout: int
     :return: the headers as dictonary
     :rtype: dict
     """
     timestamp = datetime.now().timestamp()
     return {
-            "X-VOLD-Request-Timeout-ms": str(int(request_timeout)),
-            "X-VOLD-Request-Origin-Time-ms": str(int(timestamp))
+        "X-VOLD-Request-Timeout-ms": str(int(request_timeout)),
+        "X-VOLD-Request-Origin-Time-ms": str(int(timestamp))
     }
 
 
@@ -77,7 +82,8 @@ def build_delete_headers(request_timeout, vector_clock):
     """
     This method builds the request headers for the delete requests.
 
-    :param request_timeout: the time where the request should be done in milli seconds
+    :param request_timeout: the time where the request should be done in milli
+    seconds
     :type request_timeout: int
     :param vector_clock: the vector clock which represents the version which
     should be delete
@@ -94,7 +100,8 @@ def build_set_headers(request_timeout, vector_clock, content_type="text/plain"):
     """
     This method builds the request headers for the set requests.
 
-    :param request_timeout: the time where the request should be done in milli seconds
+    :param request_timeout: the time where the request should be done in milli
+    seconds
     :type request_timeout: int
     :param vector_clock: the vector clock which represents the version which
     should be create or update
@@ -113,7 +120,8 @@ def build_version_headers(request_timeout):
     """
     This method builds the request headers for the version requests.
 
-    :param request_timeout: the time where the request should be done in milli seconds
+    :param request_timeout: the time where the request should be done in milli
+    seconds
     :type request_timeout: int
     :return: the headers as dictionary
     :rtype: dict
