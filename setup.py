@@ -5,7 +5,6 @@ from setuptools import setup
 from distutils.util import convert_path
 import sys
 
-
 class Tox(TestCommand):
     """
     This is a special command class that runs tox from setup.py
@@ -30,14 +29,12 @@ class Tox(TestCommand):
         errno = tox.cmdline(args=args)
         sys.exit(errno)
 
-
 def get_version():
     main_ns = {}
     ver_path = convert_path('voldemort_client/version.py')
     with open(ver_path) as ver_file:
         exec(ver_file.read(), main_ns)
     return main_ns['__version__']
-
 
 def readme():
     with open('README.rst') as f:
@@ -63,9 +60,7 @@ config = dict(
         'Topic :: Software Development :: Libraries :: Python Modules'
     ],
     keywords='',
-    packages=[
-        'voldemort_client'
-    ],
+    packages=['voldemort_client'],
     platforms=['any'],
     install_requires=["simplejson", "requests"],
     tests_require=['tox'],
